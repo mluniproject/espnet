@@ -171,13 +171,16 @@ def prep_chime6(root_dir, out_dir, scoring_txt_normalization="chime7", eval_opt=
             if eval_opt > 0 and tsplit != "eval":
                 continue
 
-            [
-                os.symlink(
-                    x,
-                    os.path.join(out_dir, "audio", tsplit, Path(x).stem) + ".wav",
-                )
-                for x in sess2audio[sess_name]
-            ]
+            def safe_symlink(src, dest):
+                try:
+                    os.symlink(src, dest)
+                except OSError as e:
+                    print(f"Failed to create symlink for {src}: {e}")
+
+            [safe_symlink(
+                x,
+                os.path.join(out_dir, "audio", tsplit, Path(x).stem) + ".wav"
+            ) for x in sess2audio[sess_name]]
 
             with open(
                 os.path.join(out_dir, "transcriptions", tsplit, sess_name + ".json"),
@@ -266,9 +269,10 @@ def prep_dipco(root_dir, out_dir, scoring_txt_normalization="chime7", eval_opt=0
 
     for split in splits:
         # here same splits no need to remap
-        Path(os.path.join(out_dir, "audio", split)).mkdir(parents=True, exist_ok=False)
+
+        Path(os.path.join(out_dir, "audio", split)).mkdir(parents=True, exist_ok=True)
         Path(os.path.join(out_dir, "transcriptions", split)).mkdir(
-            parents=True, exist_ok=False
+            parents=True, exist_ok=True
         )
         Path(os.path.join(out_dir, "transcriptions_scoring", split)).mkdir(
             parents=True, exist_ok=True
@@ -310,6 +314,12 @@ def prep_dipco(root_dir, out_dir, scoring_txt_normalization="chime7", eval_opt=0
 
             new_sess_name = "S{:02d}".format(dipco_offset + int(sess_name.strip("S")))
             # create symlinks too but swap names for the sessions too
+            def safe_symlink(src, dest):
+                try:
+                    os.symlink(src, dest)
+                except OSError as e:
+                    print(f"Failed to create symlink for {src}: {e}")
+
             for x in sess2audio[sess_name]:
                 filename = new_sess_name + "_" + "_".join(Path(x).stem.split("_")[1:])
                 if filename.split("_")[1].startswith("P"):
@@ -317,7 +327,8 @@ def prep_dipco(root_dir, out_dir, scoring_txt_normalization="chime7", eval_opt=0
                     filename = filename.split("_")[0] + "_P{:02d}".format(
                         dipco_offset + int(speaker_id.strip("P"))
                     )
-                os.symlink(x, os.path.join(out_dir, "audio", split, filename + ".wav"))
+                safe_symlink(x, os.path.join(out_dir, "audio", split, filename + ".wav"))
+
 
             with open(
                 os.path.join(out_dir, "transcriptions", split, new_sess_name + ".json"),
@@ -346,13 +357,14 @@ def prep_dipco(root_dir, out_dir, scoring_txt_normalization="chime7", eval_opt=0
 
         if len(to_uem) > 0:
             assert split in ["dev", "eval"]  # uem only for development set
-            Path(os.path.join(out_dir, "uem", split)).mkdir(parents=True)
+            Path(os.path.join(out_dir, "uem", split)).mkdir(parents=True, exist_ok=True)
             to_uem = sorted(to_uem)
             with open(os.path.join(out_dir, "uem", split, "all.uem"), "w") as f:
                 f.writelines(to_uem)
 
 
 def prep_mixer6(root_dir, out_dir, scoring_txt_normalization="chime7", eval_opt=0):
+    return
     scoring_txt_normalization = choose_txt_normalization(scoring_txt_normalization)
 
     def normalize_mixer6(annotation, txt_normalizer, eval_opt=0):
@@ -569,9 +581,4 @@ if __name__ == "__main__":
         args.txt_norm_scoring,
         args.eval_opt,
     )
-    prep_mixer6(
-        args.mixer6_root,
-        os.path.join(args.output_root, "mixer6"),
-        eval_opt=args.eval_opt,
-        scoring_txt_normalization=args.txt_norm_scoring,
-    )
+
