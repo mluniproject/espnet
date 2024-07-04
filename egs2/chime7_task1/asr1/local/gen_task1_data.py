@@ -352,149 +352,7 @@ def prep_dipco(root_dir, out_dir, scoring_txt_normalization="chime7", eval_opt=0
                 f.writelines(to_uem)
 
 
-def prep_mixer6(root_dir, out_dir, scoring_txt_normalization="chime7", eval_opt=0):
-    scoring_txt_normalization = choose_txt_normalization(scoring_txt_normalization)
 
-    def normalize_mixer6(annotation, txt_normalizer, eval_opt=0):
-        annotation_scoring = []
-        for indx in range(len(annotation)):
-            ex = annotation[indx]
-            ex_scoring = deepcopy(ex)
-            ex_scoring["words"] = txt_normalizer(ex["words"])
-            if eval_opt == 1:
-                ex["words"] = "placeholder"
-            if len(ex_scoring["words"]) > 0:
-                annotation_scoring.append(ex_scoring)
-            # if empty remove segment from scoring
-        return annotation, annotation_scoring
-
-    if eval_opt > 0:
-        splits = ["eval"]
-    else:
-        splits = ["train_call", "train_intv", "dev"]
-    audio_files = glob.glob(
-        os.path.join(
-            root_dir,
-            "data/pcm_flac",
-            "**/*.flac",
-        ),
-        recursive=True,
-    )
-    sess2audio = {}
-    for x in audio_files:
-        session_name = "_".join(Path(x).stem.split("_")[0:-1])
-        if session_name not in sess2audio:
-            sess2audio[session_name] = [x]
-        else:
-            sess2audio[session_name].append(x)
-    for c_split in splits:
-        Path(os.path.join(out_dir, "audio", c_split)).mkdir(
-            parents=True, exist_ok=False
-        )
-        Path(os.path.join(out_dir, "transcriptions", c_split)).mkdir(
-            parents=True, exist_ok=False
-        )
-        Path(os.path.join(out_dir, "transcriptions_scoring", c_split)).mkdir(
-            parents=True, exist_ok=True
-        )
-        if c_split.startswith("train"):
-            ann_json = glob.glob(os.path.join(root_dir, "splits", c_split, "*.json"))
-        elif c_split == "dev":
-            use_version = "_a"  # alternative version is _b see data section
-            ann_json = glob.glob(
-                os.path.join(root_dir, "splits", "dev" + use_version, "*.json")
-            )
-        elif c_split == "eval":
-            if eval_opt > 0:
-                ann_json = glob.glob(os.path.join(root_dir, "splits", "test", "*.json"))
-            else:
-                with open(os.path.join(root_dir, "splits", "test.list"), "r") as f:
-                    test_list = f.readlines()
-                sessions = [x.split("\t")[0] for x in test_list]
-                for sess_name in sessions:
-                    [
-                        os.symlink(
-                            x,
-                            os.path.join(
-                                out_dir,
-                                "audio",
-                                c_split,
-                                Path(x).stem + ".flac",
-                            ),
-                        )
-                        for x in sess2audio[sess_name]
-                    ]
-                return
-
-        to_uem = []
-        for j_file in ann_json:
-            with open(j_file, "r") as f:
-                annotation = json.load(f)
-            sess_name = Path(j_file).stem
-            # add session name
-            [x.update({"session_id": sess_name}) for x in annotation]
-            if c_split == "eval":
-                annotation, annotation_scoring = normalize_mixer6(
-                    annotation, scoring_txt_normalization, eval_opt
-                )
-            else:
-                annotation, annotation_scoring = normalize_mixer6(
-                    annotation, scoring_txt_normalization
-                )
-            # create symlinks too
-            [
-                os.symlink(
-                    x,
-                    os.path.join(out_dir, "audio", c_split, Path(x).stem + ".flac"),
-                )
-                for x in sess2audio[sess_name]
-            ]
-
-            with open(
-                os.path.join(out_dir, "transcriptions", c_split, sess_name + ".json"),
-                "w",
-            ) as f:
-                json.dump(annotation, f, indent=4)
-            with open(
-                os.path.join(
-                    out_dir,
-                    "transcriptions_scoring",
-                    c_split,
-                    sess_name + ".json",
-                ),
-                "w",
-            ) as f:
-                json.dump(annotation_scoring, f, indent=4)
-            # dump uem too for dev only
-            if c_split == "dev":
-                uem_start = sorted(
-                    annotation_scoring, key=lambda x: float(x["start_time"])
-                )[0]["start_time"]
-                uem_end = sorted(
-                    annotation_scoring, key=lambda x: float(x["end_time"])
-                )[-1]["end_time"]
-                c_uem = "{} 1 {} {}\n".format(
-                    sess_name,
-                    "{:.3f}".format(float(uem_start)),
-                    "{:.3f}".format(float(uem_end)),
-                )
-                to_uem.append(c_uem)
-            elif c_split == "eval":
-                uem_start = 0
-                uem_end = max([sf.SoundFile(x).frames for x in sess2audio[sess_name]])
-                c_uem = "{} 1 {} {}\n".format(
-                    sess_name,
-                    "{:.3f}".format(float(uem_start)),
-                    "{:.3f}".format(float(uem_end / 16000)),
-                )
-                to_uem.append(c_uem)
-
-        if len(to_uem) > 0:
-            assert c_split in ["dev", "eval"]  # uem only for development set
-            Path(os.path.join(out_dir, "uem", c_split)).mkdir(parents=True)
-            to_uem = sorted(to_uem)
-            with open(os.path.join(out_dir, "uem", c_split, "all.uem"), "w") as f:
-                f.writelines(to_uem)
 
 
 if __name__ == "__main__":
@@ -518,13 +376,6 @@ if __name__ == "__main__":
         dest="dipco_root",
         help="Path to DiPCo dataset main directory."
         "It should contain audio and transcriptions as sub-folders.",
-    )
-    parser.add_argument(
-        "-m,--mixer6_root",
-        type=str,
-        metavar="STR",
-        dest="mixer6_root",
-        help="Path to Mixer6 dataset main directory.",
     )
     parser.add_argument(
         "-o,--output_root",
@@ -569,9 +420,4 @@ if __name__ == "__main__":
         args.txt_norm_scoring,
         args.eval_opt,
     )
-    prep_mixer6(
-        args.mixer6_root,
-        os.path.join(args.output_root, "mixer6"),
-        eval_opt=args.eval_opt,
-        scoring_txt_normalization=args.txt_norm_scoring,
-    )
+

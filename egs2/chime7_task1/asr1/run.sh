@@ -21,7 +21,7 @@ chime5_root= # you can leave it empty if you have already generated CHiME-6 data
 chime6_root=/raid/users/popcornell/CHiME6/espnet/egs2/chime6/asr1/CHiME6 # will be created automatically from chime5
 # but if you have it already it will be skipped, please put your own path
 dipco_root=${PWD}/datasets/dipco # this will be automatically downloaded
-mixer6_root=/raid/users/popcornell/mixer6 # put yours here
+
 
 # DATAPREP CONFIG
 manifests_root=./data/lhotse # dir where to save lhotse manifests
@@ -31,7 +31,7 @@ gen_eval=0 # please not generate eval before release of mixer 6 eval
 
 
 gss_dump_root=./exp/gss
-ngpu=4  # set equal to the number of GPUs you have, used for GSS and ASR training
+ngpu=1  # set equal to the number of GPUs you have, used for GSS and ASR training
 train_min_segment_length=1 # discard sub one second examples, they are a lot in chime6
 train_max_segment_length=20  # also reduce if you get OOM, here A100 40GB
 
@@ -43,7 +43,7 @@ gss_max_batch_dur=90 # set accordingly to your GPU VRAM, A100 40GB you can use 3
 cmd_gss=run.pl # change to suit your needs e.g. slurm !
 # note with run.pl your GPUs need to be in exclusive mode otherwise it fails
 # to go multi-gpu see https://groups.google.com/g/kaldi-help/c/4lih8UKHBoc
-gss_dsets="chime6_train,chime6_dev,dipco_dev,mixer6_dev"
+gss_dsets="chime6_train,chime6_dev,dipco_dev"
 gss_iterations=20
 top_k=80
 # we do not train with mixer 6 training + GSS here, but you can try.
@@ -58,7 +58,7 @@ inference_config="conf/decode_asr_transformer.yaml"
 inference_asr_model=valid.acc.ave.pth
 asr_train_set=kaldi/train_all_mdm_ihm_rvb_gss
 asr_cv_set=kaldi/chime6/dev/gss # use chime only for validation. you can also try using all datasets after gss: kaldi/dev_all_gss
-asr_tt_set="kaldi/chime6/dev/gss kaldi/dipco/dev/gss/ kaldi/mixer6/dev/gss/"
+asr_tt_set="kaldi/chime6/dev/gss kaldi/dipco/dev/gss/ "
 lm_config="conf/train_lm.yaml"
 use_lm=false
 use_word_lm=false
@@ -97,13 +97,13 @@ fi
 
 if [ $decode_train == "dev" ]; then
   # apply gss only on dev
-  gss_dsets="chime6_dev,dipco_dev,mixer6_dev"
-  asr_tt_set="kaldi/chime6/dev/gss kaldi/dipco/dev/gss/ kaldi/mixer6/dev/gss/"
+  gss_dsets="chime6_dev,dipco_dev"
+  asr_tt_set="kaldi/chime6/dev/gss kaldi/dipco/dev/gss/ "
 elif
   [ $decode_train == "eval" ]; then
   # apply gss only on eval
-  gss_dsets="chime6_eval,dipco_eval,mixer6_eval"
-  asr_tt_set="kaldi/chime6/eval/gss kaldi/dipco/eval/gss/ kaldi/mixer6/eval/gss/"
+  gss_dsets="chime6_eval,dipco_eval"
+  asr_tt_set="kaldi/chime6/eval/gss kaldi/dipco/eval/gss/ "
 fi
 
 if [ ${stage} -le 0 ] && [ $stop_stage -ge 0 ]; then
@@ -111,7 +111,6 @@ if [ ${stage} -le 0 ] && [ $stop_stage -ge 0 ]; then
   local/gen_task1_data.sh --chime6-root $chime6_root --stage $dprep_stage  --chime7-root $chime7_root \
     --chime5_root "$chime5_root" \
 	  --dipco-root $dipco_root \
-	  --mixer6-root $mixer6_root \
 	  --stage $dprep_stage \
 	  --train_cmd "$cmd_dprep" \
 	  --gen-eval $gen_eval
@@ -120,7 +119,7 @@ fi
 
 if [ ${stage} -le 1 ] && [ $stop_stage -ge 1 ]; then
   # parse all datasets to lhotse
-  for dset in chime6 dipco mixer6; do
+  for dset in chime6 dipco ; do
     for dset_part in "train" "dev" "eval"; do
 
       if [ $dset == dipco ] && [ $dset_part == train ]; then
